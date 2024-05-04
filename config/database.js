@@ -6,7 +6,7 @@ const {MONGODB_URI} = require('../keys/keys')
 
 console.log('MONGODB_URI.........',MONGODB_URI)
 
-mongoose.connect(MONGODB_URI, {useNewUrlParser: true,useCreateIndex: true, useFindAndModify: false, useUnifiedTopology: true});
+mongoose.connect(MONGODB_URI, {useNewUrlParser: true, useUnifiedTopology: true});
 
 mongoose.connection.on('connected', function(){
     console.log('Database Connection Established.');
@@ -27,7 +27,7 @@ mongoose.connection.on('reconnected', function () {
 
 mongoose.connection.on('disconnected', function() {
 	console.log('MongoDB disconnected!');
-	mongoose.connect(MONGODB_URI, {useNewUrlParser: true,useCreateIndex: true, useFindAndModify: false, useUnifiedTopology: true},/*{server:{auto_reconnect:true}}*/);
+	mongoose.connect(MONGODB_URI, {useNewUrlParser: true, useUnifiedTopology: true},/*{server:{auto_reconnect:true}}*/);
 });
 	
 module.export = mongoose;

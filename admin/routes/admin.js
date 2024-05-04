@@ -1,34 +1,20 @@
-var express = require('express');
-var router = express.Router();
-
-const { login_validator,changePassword_validator } = require('../../validation/user.middleware')
-const { verifyAccessToken } = require('../../middleware/admin.middleware')
-const {validatorFunc} = require('../../helper/commonFunction.helper'); 
-
+const express = require('express');
+const router = express.Router();
+const { login_validator } = require('../../validation/user.validator')
 const {
   login,
-  logout,
-  refreshToken,
-  changePassword,
-  forgotPassword,
-  getAllUsersProfile,
-  activateDeactivateUser,
-  deleteUser,
-  getAllUsersExcel
-} = require('../controllers/admin.controller')
+  logout
+} = require('../controllers/admin.controller');
+const authenticate = require('../../middleware/authenticate');
 
-router.post('/login', login_validator,validatorFunc, login)
-router.post('/logout', logout)
-// router.post('/refresh-token', refresh_token, refreshToken)
-router.post('/changePassword', changePassword_validator, validatorFunc, changePassword)
-router.post('/forgotPassword', validatorFunc,forgotPassword)
-router.get('/get-all-users', getAllUsersProfile);
-router.put('/active-deactive-user/:id', activateDeactivateUser);
-router.delete('/delete-user/:id', deleteUser);
-router.get('/get-all-users-excel', verifyAccessToken, getAllUsersExcel);
+
+
+router.post('/login', login_validator, login)
+router.get('/logout', authenticate, logout)
+
+
+
 
 module.exports = router;
 
 
-// mongosh "mongodb+srv://cluster0.4mscd.mongodb.net/myFirstDatabase" --username commonApp
-// mongodb+srv://commonApp:<password>@cluster0.4mscd.mongodb.net/test
