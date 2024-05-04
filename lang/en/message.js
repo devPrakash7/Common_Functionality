@@ -49,6 +49,7 @@ module.exports = {
         general_error_content: 'Something went wrong. Please try again later.',
         unauthorized_user: 'Unauthorized, please login.',
         invalid_user: 'You are not authorized to do this operation.',
+        invalid_token: 'please enter a valid token',
         invalid_login: 'You are not authorized.',
         blackList_mail: `Please enter a valid email, we don't allow dummy emails.`
     },

@@ -37,7 +37,7 @@ const userSchema = new Schema({
     email: { type: String },
     password: { type: String },
     confirm_password: { type: String },
-    employee_id: { type: Number, unique: true },
+    employee_id: { type: String },
     joining_date: { type: String },
     phone: { type: String },
     profile_image: { type: String, default: null },

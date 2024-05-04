@@ -14,7 +14,6 @@ const constants = require('../../config/constants')
 const {
     JWT_SECRET
 } = require('../../keys/keys');
-const { add_new_user, login_response } = require('../../reponseData/user.reponse')
 const {
     isValid
 } = require('../../services/blackListMail')
@@ -45,12 +44,6 @@ exports.addUser = async (req, res, next) => {
 
         if (reqBody.confirm_password !== reqBody.password)
             return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.password_mismatch', {}, req.headers.lang);
-
-        if (!user.validPassword(reqBody.password))
-            return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.invalid_username_password', {}, req.headers.lang);
-
-        if (!user.validPassword(reqBody.confirm_password))
-            return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.invalid_username_password', {}, req.headers.lang);
 
         reqBody.password = await bcrypt.hash(reqBody.password, 10);
         reqBody.confirm_password = await bcrypt.hash(reqBody.confirm_password, 10);
@@ -96,7 +89,11 @@ exports.logout = async (req, res, next) => {
     try {
 
         const reqBody = req.user
-        let UserData = await User.findById(reqBody._id)
+        let UserData = await User.findById(reqBody._id);
+
+        if (!UserData || (UserData.user_type !== constants.USER_TYPE.USER))
+            return sendResponse(res, constants.WEB_STATUS_CODE.UNAUTHORIZED, constants.STATUS_CODE.UNAUTHENTICATED, 'GENERAL.unauthorized_user', {}, req.headers.lang);
+
         UserData.tokens = null
         UserData.refresh_tokens = null
 
@@ -116,12 +113,9 @@ exports.login = async (req, res, next) => {
     try {
 
         const reqBody = req.body
-
         let user = await User.findByCredentials(reqBody.email, reqBody.password, reqBody.user_type || '2');
-
         if (user == 1) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.email_not_found', {}, req.headers.lang);
         if (user == 2) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.invalid_password', {}, req.headers.lang);
-
         if (user.status == 0) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.inactive_account', {}, req.headers.lang);
         if (user.status == 2) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.deactive_account', {}, req.headers.lang);
         if (user.deleted_at != null) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.inactive_account', {}, req.headers.lang);
@@ -131,9 +125,25 @@ exports.login = async (req, res, next) => {
 
         user.device_type = (reqBody.device_type) ? reqBody.device_type : null
         user.device_token = (reqBody.device_token) ? reqBody.device_token : null
+        user.tokens = newToken;
+        user.refresh_tokens = refreshToken;
+        await user.save();
 
-        await user.save()
-        let responseData = await login_response(user)
+        const responseData = {
+            _id: user._id,
+            first_name: user.last_name,
+            last_name: user.first_name,
+            email: user.email,
+            employee_id: user.employee_id,
+            joining_date: user.joining_date,
+            tokens: user.tokens,
+            user_type: user.user_type,
+            refresh_tokens: user.refresh_tokens,
+            phone: user.phone,
+            company: user.company,
+            department: user.department,
+            designation: user.designation
+        }
 
         return sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.login_success', responseData, req.headers.lang);
 
@@ -146,173 +156,27 @@ exports.login = async (req, res, next) => {
 
 
 
-exports.forgotPassword = async (req, res, next) => {
-    try {
-
-        const reqBody = req.body
-        let existingUser = await getUser(reqBody.email, 'email');
-
-        if (!existingUser) {
-            return sendResponse(res, constants.WEB_STATUS_CODE.NOT_FOUND, constants.STATUS_CODE.NOT_FOUND, 'USER.email_not_found', {}, req.headers.lang);
-        }
-
-        let updated_at = await dateFormat.set_current_timestamp();
-        reset_password_token = await jwt.sign({
-            data: reqBody.email
-        }, JWT_SECRET, {
-            expiresIn: constants.URL_EXPIRE_TIME
-        })
-
-        // let tempTokens = Math.floor(Math.random() * 10000000)
-        let updateData = {
-            updated_at: updated_at,
-            reset_password_token: reset_password_token
-        }
-
-
-        let conditionData = {
-            email: reqBody.email
-        }
-
-        const user = await updateUser(conditionData, updateData);
-
-        let sendMail = {
-            'to': reqBody.email,
-            'lang': existingUser.lang,
-            'templateSlug': constants.EMAIL_TEMPLATE.PASSWORD_RESET,
-            'data': {
-                userName: existingUser.first_name,
-                url: Keys.BASEURL + 'v1/web/reset-password?token=' + reset_password_token
-            }
-        }
-
-        let isSendEmail = await sendEmail(req, sendMail);
-        if (isSendEmail) {
-            console.log('email has been sent');
-        } else {
-            console.log('email has not been sent');
-        }
-
-        sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.forgotPassword_email_success', user, req.headers.lang);
-
-    } catch (err) {
-        console.log(err)
-        sendResponse(res, constants.WEB_STATUS_CODE.SERVER_ERROR, constants.STATUS_CODE.FAIL, 'GENERAL.general_error_content', err.message, req.headers.lang)
-    }
-}
-
-
-exports.changePassword = async (req, res, next) => {
-    try {
-
-        const reqBody = req.body
-
-        if (reqBody.new_password !== reqBody.confirm_password) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.password_mismatch', {}, req.headers.lang)
-
-        let userDetails = await User.findById(req.user._id);
-
-        if (!userDetails.validPassword(reqBody.old_password)) return sendResponse(res, constants.WEB_STATUS_CODE.BAD_REQUEST, constants.STATUS_CODE.FAIL, 'USER.invalidOldPassword', {}, req.headers.lang)
-
-        userDetails.password = await bcrypt.hash(reqBody.new_password, 10);
-        userDetails.updated_at = await dateFormat.set_current_timestamp();
-
-        const changePassword = updateUser({
-            _id: userDetails._id
-        }, userDetails)
-
-        sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.passwordUpdate_success', changePassword, req.headers.lang);
-
-    } catch (err) {
-        console.log(err)
-        sendResponse(res, constants.WEB_STATUS_CODE.SERVER_ERROR, constants.STATUS_CODE.FAIL, 'GENERAL.general_error_content', err.message, req.headers.lang)
-    }
-}
-
-
-
-exports.resetPassword = async (req, res, next) => {
-
-    try {
-
-        const reqBody = req.body
-
-        if (reqBody.new_password !== reqBody.confirm_password) {
-
-            message = req.flash(
-                'error',
-                'New password and confirm password not matched.'
-            );
-
-            return res.redirect(
-                Keys.BASEURL + 'v1/web/reset-password?token=' + reqBody.reset_password_token
-            );
-        }
-
-
-        let userDetails = await getUser(reqBody.reset_password_token, "reset_password_token");
-
-        if (!userDetails) {
-            message = req.flash(
-                'error',
-                'Your account verify link expire or invalid.'
-            );
-
-            return res.render('message', {
-                req: req,
-                logoUrl: Keys.BASEURL + `images/logo/logo.png`,
-                appBaseUrl: Keys.BASEURL,
-                constants: constants,
-                message: 'message',
-                error: req.flash('error'),
-                success: req.flash('success'),
-            });
-        }
-
-        userDetails.password = await bcrypt.hash(reqBody.new_password, 10);
-        userDetails.updated_at = await dateFormat.set_current_timestamp();
-        userDetails.reset_password_token = null
-
-        const changePassword = updateUser({
-            reset_password_token: reqBody.reset_password_token
-        }, userDetails)
-
-        // sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.passwordUpdate_success', changePassword, req.headers.lang);
-
-        message = req.flash(
-            'success',
-            'Your password successfully changed.'
-        );
-
-        return res.render('message', {
-            req: req,
-            logoUrl: Keys.BASEURL + `images/logo/logo.png`,
-            appBaseUrl: Keys.BASEURL,
-            constants: constants,
-            message: 'message',
-            error: req.flash('error'),
-            success: req.flash('success'),
-        });
-
-    } catch (err) {
-        console.log(err)
-        sendResponse(res, constants.WEB_STATUS_CODE.SERVER_ERROR, constants.STATUS_CODE.FAIL, 'GENERAL.general_error_content', err.message, req.headers.lang)
-    }
-}
-
-
-
-
-
 exports.generate_auth_tokens = async (req, res, next) => {
 
     try {
 
-        const refresh_tokens = req.body.refresh_tokens
-        let user = await User.findOne({ refresh_tokens: refresh_tokens })
+        const refresh_token = req.body.refresh_token
+        let user = await User.findOne({ refresh_tokens: refresh_token })
+
+        if (!user)
+            return sendResponse(res, constants.WEB_STATUS_CODE.UNAUTHORIZED, constants.STATUS_CODE.UNAUTHENTICATED, 'GENERAL.invalid_token', {}, req.headers.lang);
 
         let newToken = await user.generateAuthToken();
+        let refresh_tokens = await user.generateRefreshToken();
+        await user.save();
 
-        sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.get_user_auth_token', newToken, req.headers.lang);
+        let data = {
+            user_id: user._id,
+            tokens: newToken,
+            refresh_tokens: refresh_tokens
+        } || {}
+
+        sendResponse(res, constants.WEB_STATUS_CODE.OK, constants.STATUS_CODE.SUCCESS, 'USER.get_user_auth_token', data, req.headers.lang);
 
     } catch (err) {
         console.log(err)

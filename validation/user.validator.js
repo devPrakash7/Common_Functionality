@@ -79,6 +79,12 @@ exports.user_validator = [
     .isString().withMessage('designation must be a string')
     .trim(),
 
+  body('employee_id')
+    .not()
+    .isEmpty().withMessage('employee_id is required')
+    .isString().withMessage('employee_id must be a string')
+    .trim(),
+
 ];
 
 
@@ -101,6 +107,17 @@ exports.login_validator = [
     .isLength({ min: 8 }).withMessage('password must be at least 8 characters ')
     .trim(),
 ];
+
+exports.generate_new_auth_token_validator = [
+
+  body('refresh_token')
+    .not()
+    .isEmpty()
+    .withMessage('refresh_token is required')
+    .isString().withMessage('refresh_token mus be a string')
+    .trim(),
+
+]
 
 exports.changePassword_validator = [
   body('old_password')
